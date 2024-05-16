@@ -24,12 +24,19 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Initialize CodeQL
-        id: init_codeql
+        id: init
         uses: github/codeql-action/init@v1
         with:
           languages: ${{ matrix.language }}
           category: ${{ matrix.language }}
           queries: security-and-quality
+
+      - name: Put CodeQL on the path
+        env:
+          CODEQL_PATH: '${{ steps.init.outputs.codeql-path }}'
+        run: |
+          echo "Path to executable: $CODEQL_PATH"
+          dirname "$CODEQL_PATH" >> $GITHUB_PATH
 
       - if: matrix.language == 'csharp'
         name: Build C# code
@@ -46,5 +53,24 @@ jobs:
       - name: Perform CodeQL Analysis
         id: analyze_codeql
         uses: github/codeql-action/analyze@v1
+
+      - name: Check Vulnerabilities
+        id: vulnerabilities
+        run: |
+             echo "check 1"
+             codeql bqrs decode ../results/java.sarif | awk -F',' '{if($3 == "High" || $3 == "Critical") print}'
+             results=$(codeql bqrs decode ../results/java.sarif | awk -F',' '{if($3 == "High" || $3 == "Critical") print}')
+             echo "check 2"
+             if [ -n "$results" ]; then
+               echo "name=has_vulnerabilities::true" >> $GITHUB_STATE
+               echo "$results"
+             else
+               echo "name=has_vulnerabilities::false" >> $GITHUB_STATE
+             fi
+
+      - name: Fail Build on Issues
+        if: steps.vulnerabilities.outputs.has_vulnerabilities == 'true'
+        run: exit 1
+ 
 
 # Built with ❤ by [Pipeline Foundation](https://pipeline.foundation)
